@@ -257,6 +257,10 @@ MPP_RET mpp_frame_copy(MppFrame dst, MppFrame src)
         mpp_meta_put(p->meta);
 
     memcpy(dst, src, sizeof(MppFrameImpl));
+    
+    // STRIP FBC GLOBALLY IN ALL FRAME COPIES
+    ((MppFrameImpl *)dst)->fmt = (MppFrameFormat)(((MppFrameImpl *)dst)->fmt & ~0x00f00000);
+
     p = (MppFrameImpl *)src;
     if (p->meta)
         mpp_meta_inc_ref(p->meta);
@@ -355,7 +359,17 @@ MPP_FRAME_ACCESSORS(MppFrameColorPrimaries, color_primaries)
 MPP_FRAME_ACCESSORS(MppFrameColorTransferCharacteristic, color_trc)
 MPP_FRAME_ACCESSORS(MppFrameColorSpace, colorspace)
 MPP_FRAME_ACCESSORS(MppFrameChromaLocation, chroma_location)
-MPP_FRAME_ACCESSORS(MppFrameFormat, fmt)
+MppFrameFormat mpp_frame_get_fmt(const MppFrame s)
+{
+    check_is_mpp_frame((MppFrameImpl*)s);
+    return ((MppFrameImpl*)s)->fmt;
+}
+void mpp_frame_set_fmt(MppFrame s, MppFrameFormat v)
+{
+    check_is_mpp_frame((MppFrameImpl*)s);
+    v = (MppFrameFormat)(v & ~0x00f00000); // STRIP FBC FLAGS GLOBALLY
+    ((MppFrameImpl*)s)->fmt = v;
+}
 MPP_FRAME_ACCESSORS(MppFrameRational, sar)
 MPP_FRAME_ACCESSORS(MppFrameMasteringDisplayMetadata, mastering_display)
 MPP_FRAME_ACCESSORS(MppFrameContentLightMetadata, content_light)
