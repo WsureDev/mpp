@@ -584,7 +584,7 @@ RK_S32 h265d_nal_sps(BitReadCtx_t *bit, H265dSps *sps, const H265dVps *vps_list[
     case H265_CHROMA_420 : {
         switch (sps->bit_depth) {
         case 8:  sps->pix_fmt = MPP_FMT_YUV420SP; break;
-        case 10: sps->pix_fmt = MPP_FMT_YUV420SP_10BIT; break;
+        case 10: sps->pix_fmt = MPP_FMT_YUV420SP; break; // FORCE 8-BIT DOWNGRADE
         default:
             mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
             ret = MPP_ERR_PROTOL;
@@ -594,7 +594,7 @@ RK_S32 h265d_nal_sps(BitReadCtx_t *bit, H265dSps *sps, const H265dVps *vps_list[
     case H265_CHROMA_422 : {
         switch (sps->bit_depth) {
         case 8:  sps->pix_fmt = MPP_FMT_YUV422SP; break;
-        case 10: sps->pix_fmt = MPP_FMT_YUV422SP_10BIT; break;
+        case 10: sps->pix_fmt = MPP_FMT_YUV422SP; break; // FORCE 8-BIT DOWNGRADE
         default:
             mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
             ret = MPP_ERR_PROTOL;
@@ -604,7 +604,7 @@ RK_S32 h265d_nal_sps(BitReadCtx_t *bit, H265dSps *sps, const H265dVps *vps_list[
     case H265_CHROMA_444 : {
         switch (sps->bit_depth) {
         case 8:  sps->pix_fmt = MPP_FMT_YUV444SP; break;
-        case 10: sps->pix_fmt = MPP_FMT_YUV444SP_10BIT; break;
+        case 10: sps->pix_fmt = MPP_FMT_YUV444SP; break; // FORCE 8-BIT DOWNGRADE
         default:
             mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
             ret = MPP_ERR_PROTOL;
