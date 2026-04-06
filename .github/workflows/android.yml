@@ -47,6 +47,7 @@ jobs:
             -DMPP_PROJECT_NAME=mpp \
             -DVPU_PROJECT_NAME=vpu \
             -DHAVE_DRM=ON \
+            -DBUILD_TEST=OFF \
             ..
 
       - name: Build
@@ -54,14 +55,10 @@ jobs:
 
       - name: Collect artifacts
         run: |
-          mkdir -p output/lib output/bin output/include
+          mkdir -p output/lib output/include
           # Collect built libraries
           find build_android -name "*.so" -exec cp {} output/lib/ \;
           find build_android -name "*.a" -exec cp {} output/lib/ \;
-          # Collect test binaries
-          find build_android -maxdepth 3 -type f -executable ! -name "*.so" ! -name "*.a" \
-            ! -name "*.cmake" ! -name "*.txt" ! -name "*.pc" \
-            -path "*/test/*" -exec cp {} output/bin/ \; 2>/dev/null || true
           # Collect public headers
           if [ -d inc ]; then
             cp -r inc/* output/include/
@@ -69,8 +66,6 @@ jobs:
           # List output for verification
           echo "=== Libraries ==="
           ls -lh output/lib/
-          echo "=== Test Binaries ==="
-          ls -lh output/bin/ 2>/dev/null || echo "No test binaries found"
           echo "=== Headers ==="
           ls -lh output/include/
 
