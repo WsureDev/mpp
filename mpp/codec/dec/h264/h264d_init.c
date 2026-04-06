@@ -413,15 +413,12 @@ static MPP_RET dpb_mark_malloc(H264dVideoCtx_t *p_Vid, H264_StorePic_t *dec_pic)
 
             if ((H264_CHROMA_400 == p_Vid->yuv_format) && (8 == p_Vid->bit_depth_luma)) {
                 fmt = MPP_FMT_YUV400;
-            } else if ((H264_CHROMA_420 == p_Vid->yuv_format) && (8 == p_Vid->bit_depth_luma)) {
+            } else if (H264_CHROMA_420 == p_Vid->yuv_format) {
+                // 强制将8位和10位 H.264 420 统一降维输出为 8位 NV12
                 fmt = MPP_FMT_YUV420SP;
-            } else if ((H264_CHROMA_420 == p_Vid->yuv_format) && (10 == p_Vid->bit_depth_luma)) {
-                fmt = MPP_FMT_YUV420SP_10BIT;
-            } else if ((H264_CHROMA_422 == p_Vid->yuv_format) && (8 == p_Vid->bit_depth_luma)) {
+            } else if (H264_CHROMA_422 == p_Vid->yuv_format) {
+                // 同样强制422降为 8位使用
                 fmt = MPP_FMT_YUV422SP;
-                mpp_slots_set_prop(p_Dec->frame_slots, SLOTS_LEN_ALIGN, mpp_align_wxh2yuv422);
-            } else if ((H264_CHROMA_422 == p_Vid->yuv_format) && (10 == p_Vid->bit_depth_luma)) {
-                fmt = MPP_FMT_YUV422SP_10BIT;
                 mpp_slots_set_prop(p_Dec->frame_slots, SLOTS_LEN_ALIGN, mpp_align_wxh2yuv422);
             }
 
