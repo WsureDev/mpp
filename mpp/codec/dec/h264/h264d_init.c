@@ -429,12 +429,12 @@ static MPP_RET dpb_mark_malloc(H264dVideoCtx_t *p_Vid, H264_StorePic_t *dec_pic)
             if ((H264_CHROMA_400 == p_Vid->yuv_format) && (8 == p_Vid->bit_depth_luma)) {
                 fmt = MPP_FMT_YUV400;
             } else if (H264_CHROMA_420 == p_Vid->yuv_format) {
-                if (p_Vid->bit_depth_luma > 8 && !downgrade_10bit)
+                if (p_Vid->bit_depth_luma == 10 && !downgrade_10bit)
                     fmt = MPP_FMT_YUV420SP_10BIT;
                 else
                     fmt = MPP_FMT_YUV420SP;
             } else if (H264_CHROMA_422 == p_Vid->yuv_format) {
-                if (p_Vid->bit_depth_luma > 8 && !downgrade_10bit)
+                if (p_Vid->bit_depth_luma == 10 && !downgrade_10bit)
                     fmt = MPP_FMT_YUV422SP_10BIT;
                 else
                     fmt = MPP_FMT_YUV422SP;
