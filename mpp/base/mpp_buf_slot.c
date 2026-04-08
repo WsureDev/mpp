@@ -1500,7 +1500,7 @@ MPP_RET mpp_slots_set_prop(MppBufSlots slots, SlotsPropType type, void *val)
                 MppFrameImpl *dst = (MppFrameImpl *)slot->frame;
                 MppFrameImpl *src = (MppFrameImpl *)val;
 
-                dst->fmt = (MppFrameFormat)(src->fmt & ~0x00f00000);
+                dst->fmt = src->fmt;
                 dst->hor_stride = src->hor_stride;
                 dst->hor_stride_pixel = src->hor_stride_pixel;
                 dst->ver_stride = src->ver_stride;

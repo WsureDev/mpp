@@ -121,7 +121,7 @@ static H265dFrame *h265d_frame_create(H265dPrs *p, RK_S32 poc, RK_U32 ref_only)
             if (force_fbc &&
                 MPP_FRAME_FMT_IS_YUV_10BIT(ctx->pix_fmt & MPP_FRAME_FMT_MASK) &&
                 !MPP_FRAME_FMT_IS_FBC(fmt)) {
-                fmt = MPP_FRAME_FBC_AFBC_V2;
+                fmt |= MPP_FRAME_FBC_AFBC_V2;
             }
         }
 
