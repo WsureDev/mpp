@@ -1,35 +1,69 @@
-# RK3588s 10-bit 视频硬解绿屏问题分析与修复说明（降维方案）
+# RK3588s 10-bit 视频硬解绿屏问题分析与修复说明（AFBC 强制方案）
 
 ## 1. 问题背景
-在 Rockchip RK3588s (Android 12) 平台上，使用 MPP (Media Process Platform) 进行硬件解码 10-bit 色深的 H.264 和 H.265 视频时，出现了严重的显示异常问题。
-具体表现为：播放 10-bit 视频时，画面出现大面积绿屏、黑块，或者“上半部分画面正常，下半部分画面全绿”。
+在 Rockchip RK3588s (Android 12) 平台上，使用 MPP (Media Process Platform) 进行硬件解码 10-bit 色深的 H.265 视频时，出现了显示异常。
+具体表现为：播放 1080p 10-bit 视频时，画面出现绿屏/绿线。4K HDR10+ 10-bit 视频显示正常。
 
-## 2. 初始排查与尝试
-最初怀疑是 Rockchip 自有的 FBC (Frame Buffer Compression / AFBC) 帧压缩机制导致的数据错乱。
-我们在 `mpp_frame.c` 和 `mpp_buf_slot.c` 等文件中，尝试强制剥离 FBC 标志位（例如 `0x00f00000` 或 `0x40000900`），试图让 VPU 输出纯 Linear 格式（线性布局）的图像。
-**结果：** 画面上半部分恢复正常（黑块消失），但下半部分仍然是绿屏（“方向对了，效果没对”）。
+## 2. 错误方案回顾（已废弃）
+
+### 方案 A-旧：10-bit→8-bit 格式降级 + FBC 全局禁用
+**此方案有两个致命错误：**
+
+1. **VDPU383 硬件不支持 10-bit→8-bit 输出转换**
+   - HAL 代码 `hal_h265d_vdpu383.c` 第 214 行：`bit_depth = 10;` 硬编码
+   - PPS 中的 `bit_depth_luma_minus8=2` 告诉硬件按 10-bit 解码
+   - 硬件始终输出 NV15 (10-bit packed) 数据
+   - 仅修改 `pix_fmt` 和 `hor_stride` 导致缓冲区过小，硬件写溢出 → 绿线
+
+2. **FBC 全局禁用导致 4K 回归**
+   - 4K HDR10+ 文件在原厂固件上通过 AFBC 路径正常显示
+   - 禁用 FBC 后强制走线性 NV15 路径 → 触发同样的 stride bug → 绿线
+
+### 关键证据：stride 溢出计算
+
+| 分辨率 | 硬件实际输出 stride | 错误 patch 设的 stride | 溢出量/行 |
+|--------|-------|--------|---------|
+| 3840x2160 | 4800 bytes (NV15) | 3840 bytes (NV12) | -960 bytes |
+| 1920x1080 | 2400 bytes (NV15) | 1920 bytes (NV12) | -480 bytes |
 
 ## 3. 根本原因分析
-通过分析进一步发现，半屏发绿问题的核心在于 **10-bit YUV (NV15) 格式在内存中的步长（Stride）与 UV 平面偏移量 (UV Offset) 计算错误**。
-- 标准的 8-bit NV12 (YUV420SP) 格式，每个像素占用 1 字节（Y）+ 0.5 字节（UV）。
-- 10-bit 的 NV15 格式，因为涉及到 10 位数据的高低位组合，存在 1.25 bytes-per-pixel 的对应关系。
-当系统层（Gralloc / HWC / DRM）去读取底层的 Buffer 时，由于对 10-bit 专属的 UV 偏移量（Offset）数学计算不匹配（或未完全兼容 MPP 吐出的非标准 Offset），导致显示控制器在读取下半帧的 Chroma (UV) 数据时，读到了无效或全 0 的内存区域，从而在 YUV 颜色空间中表现为大面积绿色。
-要完美修复此问题，需要深挖甚至重写 Gralloc、DRM 显示层以及 MPP 里的各种对齐算法，工程量巨大且极易引发其他分辨率视频的兼容性问题。
 
-## 4. 解决方案：硬件降维（Stealth Downgrade）
-为了快速、稳妥地解决绿屏问题，我们采用了一种“降维打击”的设计思路。
-既然 10-bit 在输出到屏幕时的 UV offset 处理存在系统级 Bug，而 8-bit 的 NV12 格式处理是毫无缺陷的，我们直接在 **MPP 硬件解码器的 parser (解析器) 阶段，强制将 10-bit 的格式请求改写为 8-bit**。
+RK3588 Android 12 的显示栈（Gralloc/HWC/DRM）处理 **线性 NV15** 缓冲区时，
+stride/UV-offset 计算有 bug。但 **AFBC 压缩的 NV15** 路径不受影响。
 
-具体修改点：
-- **H.265 (HEVC)**: 修改 `mpp/codec/dec/h265/h265d_sps.c`
-- **H.264 (AVC)**: 修改 `mpp/codec/dec/h264/h264d_init.c`
+- 4K HDR10+ 文件：播放器请求了 AFBC 输出 → AFBC NV15 → 显示正常
+- 1080p 10-bit 文件：播放器没有请求 AFBC → 线性 NV15 → stride bug → 绿屏
 
-当视频源为 `bit_depth == 10` 时，原本代码会将格式设为 `MPP_FMT_YUV420SP_10BIT`。我们的 Patch 直接将其重写为标准的 `MPP_FMT_YUV420SP` (即 8-bit NV12)。
-得益于 Rockchip VPU 硬件的特性，当我们要求以 8-bit 输出时，硬件解码器会自动截断或舍弃多余的 2-bit 数据，输出带有完美对齐和步长的 8-bit NV12 图像。
+## 4. 正确的修复方案：强制 AFBC 输出
 
-## 5. 收益与总结
-- **显示正常**：绿屏、黑块、下半角花屏彻底解决。系统将其视作普通的 8-bit 视频进行渲染，Gralloc 完美兼容。
-- **性能无损**：降权截断由 VPU 硬件在输出阶段自动完成，未增加任何 CPU 拷贝或软解负担。
-- **代码改动极小**：只需修改数行 if-else 判断，避免了陷入极其复杂的内存对齐数学运算中，维护成本极低。
+在 MPP 解码器层，当检测到 10-bit YUV 输出时，强制添加 `MPP_FRAME_FBC_AFBC_V2` 标志，
+使所有 10-bit 内容走 AFBC 路径（VOP2 对 AFBC NV15 的处理是正确的）。
 
-*注：此方案为针对当前 Android 12 Bug 的 Workaround，视觉上会丢失 10-bit 带来的额外色阶平滑度（退化为 8-bit 显示），但在移动端屏幕上通常难以通过肉眼察觉，是目前解决硬件解码花屏最有效且稳定的手段。*
+### 修改点
+
+1. **`inc/mpp_frame.h`**: 恢复原始 FBC 宏定义（不再全局禁用）
+2. **`mpp/codec/dec/h265/h265d_sps.c`**: 恢复原始 10-bit 格式选择（保持 NV15）
+3. **`mpp/codec/dec/h265/h265d_dpb.c`**: 恢复原始 stride 计算 + 新增 force-AFBC 逻辑
+4. **`mpp/codec/dec/h264/h264d_init.c`**: 恢复原始格式/stride + 新增 force-AFBC 逻辑
+
+### 运行时控制
+
+```bash
+# 默认启用（强制 AFBC）
+setprop mpp_dec_force_10bit_fbc 1
+
+# 禁用（例如在 Android 14+ 或已修复的显示栈上）
+setprop mpp_dec_force_10bit_fbc 0
+```
+
+## 5. 收益与风险
+
+### 收益
+- 10-bit 内容保持原始色深（NV15），不丢失 HDR/色阶信息
+- 4K HDR10+ 不受影响（原本就走 AFBC）
+- 1080p 10-bit 被强制切到 AFBC 路径，绕过线性 NV15 的 stride bug
+- 8-bit 内容完全不受影响
+
+### 已知风险
+- 如果播放器使用 buffer 模式（非 Surface 渲染），强制 AFBC 可能导致 CPU 无法直接读取帧数据
+- 可通过 `mpp_dec_force_10bit_fbc=0` 环境变量禁用此 workaround

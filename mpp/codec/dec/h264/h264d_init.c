@@ -412,33 +412,35 @@ static MPP_RET dpb_mark_malloc(H264dVideoCtx_t *p_Vid, H264_StorePic_t *dec_pic)
             MppFrameFormat out_fmt = p_Dec->cfg->base.out_fmt;
             MppFrameImpl *impl = (MppFrameImpl *)p_Dec->curframe;
 
-            /*
-             * 10-bit downgrade toggle:
-             * When mpp_dec_10bit_downgrade=1 (default), force 10-bit streams
-             * to output as 8-bit NV12/NV16. This works around a green-screen
-             * bug on RK3588s Android 12 where the Gralloc/HWC/DRM display
-             * stack computes incorrect stride/UV-offset for NV15 buffers.
-             * The VPU hardware truncates the extra 2 bits automatically.
-             *
-             * Set mpp_dec_10bit_downgrade=0 to restore native 10-bit output
-             * (requires matching Gralloc stride fix — see Scheme B).
-             */
-            RK_U32 downgrade_10bit = 1;
-            mpp_env_get_u32("mpp_dec_10bit_downgrade", &downgrade_10bit, 1);
-
             if ((H264_CHROMA_400 == p_Vid->yuv_format) && (8 == p_Vid->bit_depth_luma)) {
                 fmt = MPP_FMT_YUV400;
             } else if (H264_CHROMA_420 == p_Vid->yuv_format) {
-                if (p_Vid->bit_depth_luma == 10 && !downgrade_10bit)
+                if (p_Vid->bit_depth_luma > 8)
                     fmt = MPP_FMT_YUV420SP_10BIT;
                 else
                     fmt = MPP_FMT_YUV420SP;
             } else if (H264_CHROMA_422 == p_Vid->yuv_format) {
-                if (p_Vid->bit_depth_luma == 10 && !downgrade_10bit)
+                if (p_Vid->bit_depth_luma > 8)
                     fmt = MPP_FMT_YUV422SP_10BIT;
                 else
                     fmt = MPP_FMT_YUV422SP;
                 mpp_slots_set_prop(p_Dec->frame_slots, SLOTS_LEN_ALIGN, mpp_align_wxh2yuv422);
+            }
+
+            /*
+             * Force AFBC for 10-bit H.264 on RK3588 Android 12.
+             * Same workaround as the H.265 path — linear NV15 has
+             * display bugs in the Gralloc/HWC/DRM stack.
+             */
+            {
+                RK_U32 force_fbc = 1;
+                mpp_env_get_u32("mpp_dec_force_10bit_fbc", &force_fbc, 1);
+
+                if (force_fbc &&
+                    MPP_FRAME_FMT_IS_YUV_10BIT(fmt & MPP_FRAME_FMT_MASK) &&
+                    !MPP_FRAME_FMT_IS_FBC(out_fmt)) {
+                    out_fmt |= MPP_FRAME_FBC_AFBC_V2;
+                }
             }
 
             if (MPP_FRAME_FMT_IS_FBC(out_fmt)) {
@@ -470,17 +472,7 @@ static MPP_RET dpb_mark_malloc(H264dVideoCtx_t *p_Vid, H264_StorePic_t *dec_pic)
             }
             impl->fmt = fmt;
 
-            /*
-             * Compute stride based on the actual output bit depth, not the
-             * stream's declared bit_depth_luma.  When 10-bit is downgraded
-             * to 8-bit the stride must match the 8-bit pixel format,
-             * otherwise the buffer size and UV plane offset are wrong.
-             */
-            {
-                RK_U32 out_depth = (MPP_FRAME_FMT_IS_YUV_10BIT(fmt)) ?
-                                   p_Vid->bit_depth_luma : 8;
-                hor_stride = MPP_ALIGN(p_Vid->width * out_depth, 8) / 8;
-            }
+            hor_stride = MPP_ALIGN(p_Vid->width * p_Vid->bit_depth_luma, 8) / 8;
             ver_stride = p_Vid->height;
             /* Before cropping */
             impl->hor_stride = hor_stride;

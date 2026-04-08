@@ -7,6 +7,7 @@
 
 #include "mpp_log.h"
 #include "mpp_bit.h"
+#include "mpp_env.h"
 #include "mpp_compat_impl.h"
 #include "mpp_ref_pool.h"
 
@@ -87,17 +88,43 @@ static H265dFrame *h265d_frame_create(H265dPrs *p, RK_S32 poc, RK_U32 ref_only)
         if (frame->slot_index != 0xff)
             continue;
 
-        RK_U32 out_depth = (MPP_FRAME_FMT_IS_YUV_10BIT(ctx->pix_fmt)) ? ctx->bit_depth : 8;
-
         mpp_frame_set_width(frame->frame, ctx->width);
         mpp_frame_set_height(frame->frame, ctx->height);
         mpp_frame_set_hor_stride(frame->frame,
-                                 (MPP_ALIGN(ctx->coded_width, 64) * out_depth) >> 3);
+                                 (MPP_ALIGN(ctx->coded_width, 64) * ctx->bit_depth) >> 3);
         mpp_frame_set_ver_stride(frame->frame, ctx->coded_height);
         ctx->pix_fmt &= MPP_FRAME_FMT_MASK;
         if (p->is_hdr) {
             p->ctx->pix_fmt |= MPP_FRAME_HDR;
         }
+
+        /*
+         * Force AFBC for 10-bit YUV output on RK3588 Android 12.
+         *
+         * The VOP2 display engine on RK3588s Android 12 has a known
+         * bug handling linear (non-FBC) NV15 buffers — incorrect
+         * stride/UV-offset computation in the Gralloc/HWC/DRM stack
+         * causes green-screen artifacts.  AFBC NV15 is not affected.
+         *
+         * When mpp_dec_force_10bit_fbc=1 (default), force AFBC_V2
+         * output for 10-bit content regardless of the caller's
+         * out_fmt setting, so the display always uses the working
+         * AFBC path.
+         *
+         * Set mpp_dec_force_10bit_fbc=0 to disable this workaround
+         * (e.g. on Android 14+ where the display stack is fixed).
+         */
+        {
+            RK_U32 force_fbc = 1;
+            mpp_env_get_u32("mpp_dec_force_10bit_fbc", &force_fbc, 1);
+
+            if (force_fbc &&
+                MPP_FRAME_FMT_IS_YUV_10BIT(ctx->pix_fmt & MPP_FRAME_FMT_MASK) &&
+                !MPP_FRAME_FMT_IS_FBC(fmt)) {
+                fmt = MPP_FRAME_FBC_AFBC_V2;
+            }
+        }
+
         ctx->pix_fmt |= fmt;
         mpp_frame_set_fmt(frame->frame, ctx->pix_fmt);
 

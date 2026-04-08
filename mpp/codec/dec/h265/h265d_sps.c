@@ -578,61 +578,40 @@ RK_S32 h265d_nal_sps(BitReadCtx_t *bit, H265dSps *sps, const H265dVps *vps_list[
         goto err;
     }
 
-    /*
-     * 10-bit downgrade toggle (same env var as H.264 path).
-     * When mpp_dec_10bit_downgrade=1 (default), force 10-bit streams to
-     * output as 8-bit.  The VPU hardware truncates the extra 2 bits
-     * automatically.  This works around a green-screen bug on RK3588s
-     * Android 12 caused by incorrect NV15 stride/UV-offset handling in
-     * the Gralloc/HWC/DRM display stack.
-     *
-     * Set mpp_dec_10bit_downgrade=0 to restore native 10-bit output
-     * (requires a matching Gralloc stride fix — see Scheme B).
-     */
-    {
-        RK_U32 downgrade_10bit = 1;
-        mpp_env_get_u32("mpp_dec_10bit_downgrade", &downgrade_10bit, 1);
-
-        switch (sps->chroma_format_idc) {
-        case H265_CHROMA_400 : {
-            sps->pix_fmt = MPP_FMT_YUV400;
-        } break;
-        case H265_CHROMA_420 : {
-            switch (sps->bit_depth) {
-            case 8:  sps->pix_fmt = MPP_FMT_YUV420SP; break;
-            case 10: sps->pix_fmt = downgrade_10bit ?
-                         MPP_FMT_YUV420SP : MPP_FMT_YUV420SP_10BIT; break;
-            default:
-                mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
-                ret = MPP_ERR_PROTOL;
-                goto err;
-            }
-        } break;
-        case H265_CHROMA_422 : {
-            /* 10-bit 422 is extremely rare on mobile; downgrade is preventive */
-            switch (sps->bit_depth) {
-            case 8:  sps->pix_fmt = MPP_FMT_YUV422SP; break;
-            case 10: sps->pix_fmt = downgrade_10bit ?
-                         MPP_FMT_YUV422SP : MPP_FMT_YUV422SP_10BIT; break;
-            default:
-                mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
-                ret = MPP_ERR_PROTOL;
-                goto err;
-            }
-        } break;
-        case H265_CHROMA_444 : {
-            /* 10-bit 444 is extremely rare on mobile; downgrade is preventive */
-            switch (sps->bit_depth) {
-            case 8:  sps->pix_fmt = MPP_FMT_YUV444SP; break;
-            case 10: sps->pix_fmt = downgrade_10bit ?
-                         MPP_FMT_YUV444SP : MPP_FMT_YUV444SP_10BIT; break;
-            default:
-                mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
-                ret = MPP_ERR_PROTOL;
-                goto err;
-            }
-        } break;
+    switch (sps->chroma_format_idc) {
+    case H265_CHROMA_400 : {
+        sps->pix_fmt = MPP_FMT_YUV400;
+    } break;
+    case H265_CHROMA_420 : {
+        switch (sps->bit_depth) {
+        case 8:  sps->pix_fmt = MPP_FMT_YUV420SP; break;
+        case 10: sps->pix_fmt = MPP_FMT_YUV420SP_10BIT; break;
+        default:
+            mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
+            ret = MPP_ERR_PROTOL;
+            goto err;
         }
+    } break;
+    case H265_CHROMA_422 : {
+        switch (sps->bit_depth) {
+        case 8:  sps->pix_fmt = MPP_FMT_YUV422SP; break;
+        case 10: sps->pix_fmt = MPP_FMT_YUV422SP_10BIT; break;
+        default:
+            mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
+            ret = MPP_ERR_PROTOL;
+            goto err;
+        }
+    } break;
+    case H265_CHROMA_444 : {
+        switch (sps->bit_depth) {
+        case 8:  sps->pix_fmt = MPP_FMT_YUV444SP; break;
+        case 10: sps->pix_fmt = MPP_FMT_YUV444SP_10BIT; break;
+        default:
+            mpp_loge("sps: unsupported bit depth %d\n", sps->bit_depth);
+            ret = MPP_ERR_PROTOL;
+            goto err;
+        }
+    } break;
     }
 
     READ_UE(bit, &sps->log2_max_poc_lsb);

@@ -375,14 +375,6 @@ static void prepare_info_set_legacy(MppBufSlotsImpl *impl, MppFrame frame,
     info_set->v_stride = hal_ver_stride;
     info_set->h_stride_by_pixel = hor_stride_pixel;
     info_set->size_total = size;
-
-    /* Debug logging for 10-bit stride diagnostics (Scheme B) */
-    if (depth == 10) {
-        mpp_log("10bit_debug: width=%d height=%d fmt=0x%x depth=%d "
-                "hor_stride=%d ver_stride=%d hor_stride_pixel=%d size=%d",
-                width, height, fmt, depth,
-                hal_hor_stride, hal_ver_stride, hor_stride_pixel, size);
-    }
 }
 
 static void prepare_info_set_by_sys_cfg(MppBufSlotsImpl *impl, MppFrame frame,
