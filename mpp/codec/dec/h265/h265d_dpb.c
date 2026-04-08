@@ -87,10 +87,12 @@ static H265dFrame *h265d_frame_create(H265dPrs *p, RK_S32 poc, RK_U32 ref_only)
         if (frame->slot_index != 0xff)
             continue;
 
+        RK_U32 out_depth = (MPP_FRAME_FMT_IS_YUV_10BIT(ctx->pix_fmt)) ? ctx->bit_depth : 8;
+
         mpp_frame_set_width(frame->frame, ctx->width);
         mpp_frame_set_height(frame->frame, ctx->height);
         mpp_frame_set_hor_stride(frame->frame,
-                                 (MPP_ALIGN(ctx->coded_width, 64) * ctx->bit_depth) >> 3);
+                                 (MPP_ALIGN(ctx->coded_width, 64) * out_depth) >> 3);
         mpp_frame_set_ver_stride(frame->frame, ctx->coded_height);
         ctx->pix_fmt &= MPP_FRAME_FMT_MASK;
         if (p->is_hdr) {
