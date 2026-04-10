@@ -6,7 +6,6 @@
 #define MODULE_TAG "H265d"
 
 #include "mpp_mem.h"
-#include "mpp_env.h"
 #include "mpp_bitread.h"
 #include "mpp_bit.h"
 
